@@ -22,7 +22,7 @@ def create_master_meta(password: str, meta_path: str):
     tag = h.finalize()
     with open(meta_path, "wb") as f:
         f.write(salt + tag)
-    # ne maradjon a pw
+
     password = None
 
 def verify_master(password: str, meta_path: str) -> bytes:
@@ -31,7 +31,7 @@ def verify_master(password: str, meta_path: str) -> bytes:
     key = derive_key(password, salt)
     h = hmac.HMAC(key, hashes.SHA256(), backend=default_backend())
     h.update(b"master-check")
-    h.verify(tag)  # kivételt dob hibás jelszónál
+    h.verify(tag) 
     password = None
     return key
 

@@ -26,7 +26,7 @@ class EntryDialog(QDialog):
         form.addRow("Category:",  self.cat_edit)
         form.addRow("Note:",      self.note_edit)
 
-        # Buttons
+
         self.buttons = QDialogButtonBox(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel,
             Qt.Horizontal, self
@@ -36,7 +36,7 @@ class EntryDialog(QDialog):
         form.addRow(self.buttons)
 
     def validate(self):
-        # Egyszerű validáció: kötelező mezők
+
         if not self.name_edit.text().strip():
             QMessageBox.warning(self, "Validation", "Name cannot be empty.")
             return

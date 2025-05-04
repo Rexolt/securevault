@@ -55,7 +55,7 @@ class LoginWindow(QWidget):
             if reply == QMessageBox.Cancel:
                 return
 
-        # Sikeres login → MainWindow
+      
         self.hide()
         self.main = MainWindow(key, self.config_dir, self.vault_dir, self.meta_file)
         self.main.show()
