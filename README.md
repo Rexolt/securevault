@@ -2,7 +2,7 @@
 
 SecureVault is a modern, dark-themed password manager written in Python and PySide6. It stores each entry as an individually encrypted file with a randomized name and extension, making it harder for malware to locate your data. Built-in process scanning, masked password display, timed reveals and clipboard auto-clearing help keep your secrets safe.
 
----
+![Logo](image.png "Logo")
 
 ## Features
 
