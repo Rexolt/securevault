@@ -1,5 +1,5 @@
 style_sheet = """
-/* Sötét téma, lekerekített ablakok és gombok */
+
 QWidget {
     background-color: #121212;
     color: #e0e0e0;

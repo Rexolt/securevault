@@ -1,3 +1,5 @@
+# securevault/gui/main_window.py
+
 from pathlib import Path
 import os, json, gc
 
@@ -10,28 +12,30 @@ from PySide6.QtCore    import Qt, QTimer
 
 from securevault.storage    import Storage
 from securevault.processes  import check_processes
-from securevault.encryption import derive_key, verify_master, encrypt_entry
+from securevault.encryption import derive_key, verify_master, encrypt_entry, create_master_meta
 from cryptography.hazmat.primitives import hmac as crypto_hmac, hashes
 from cryptography.hazmat.backends import default_backend
 
 from .entry_dialog           import EntryDialog
 from .change_master_dialog   import ChangeMasterDialog
+from .recovery_dialog        import RecoveryKeysDialog
 from .style                  import style_sheet
+
 
 class MainWindow(QMainWindow):
     def __init__(self, key: bytes, config_dir: Path, vault_dir: Path, meta_file: Path):
         super().__init__()
-        self.key = key
+        self.key        = key
         self.config_dir = config_dir
-        self.vault_dir = vault_dir
-        self.meta_file = meta_file
-        self.storage = Storage(vault_dir)
+        self.vault_dir  = vault_dir
+        self.meta_file  = meta_file
+        self.storage    = Storage(vault_dir)
 
         self.setWindowTitle("SecureVault")
         self.resize(800, 500)
         self.setStyleSheet(style_sheet)
 
-        
+        # --- Central Table ---
         self.table = QTableWidget(0, 5)
         self.table.setHorizontalHeaderLabels(
             ["Name", "Username", "Password", "Category", "Note"]
@@ -40,33 +44,32 @@ class MainWindow(QMainWindow):
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.setCentralWidget(self.table)
 
-        
+        # --- Toolbar ---
         toolbar = QToolBar("Main toolbar", self)
         self.addToolBar(toolbar)
-
-        for text, slot, checkable in [
-            ("Add",               self.add_entry,        False),
-            ("Edit",              self.edit_entry,       False),
-            ("Delete",            self.delete_entry,     False),
-            ("Copy Password",     self.copy_password,    False),
-            ("Show Passwords",    self.show_passwords,   False),
+        for text, slot in [
+            ("Add",               self.add_entry),
+            ("Edit",              self.edit_entry),
+            ("Delete",            self.delete_entry),
+            ("Copy Password",     self.copy_password),
+            ("Show Passwords",    self.show_passwords),
         ]:
             act = QAction(text, self)
             act.triggered.connect(slot)
-            act.setCheckable(False)
             toolbar.addAction(act)
         toolbar.addSeparator()
 
-        
-        menubar = self.menuBar()
+        # --- Menu Bar ---
+        menubar   = self.menuBar()
         file_menu = menubar.addMenu("File")
-        file_menu.addAction("Import…", self.import_json)
-        file_menu.addAction("Export…", self.export_json)
+        file_menu.addAction("Import…",                  self.import_json)
+        file_menu.addAction("Export…",                  self.export_json)
         file_menu.addSeparator()
-        file_menu.addAction("Change Master Password…", self.change_master)
+        file_menu.addAction("Change Master Password…",  self.change_master)
+        file_menu.addAction("Manage Recovery Keys…",    self.manage_recovery)
         file_menu.addSeparator()
-        file_menu.addAction("Logout", self.logout)
-        file_menu.addAction("Exit", QApplication.instance().quit)
+        file_menu.addAction("Logout",                   self.logout)
+        file_menu.addAction("Exit",                     QApplication.instance().quit)
 
         tools_menu = menubar.addMenu("Tools")
         tools_menu.addAction("Process Scan", self.manual_process_scan)
@@ -74,26 +77,25 @@ class MainWindow(QMainWindow):
         help_menu = menubar.addMenu("Help")
         help_menu.addAction("About", self.about_dialog)
 
-       
+        # --- Status Bar ---
         self.status = QStatusBar()
         self.setStatusBar(self.status)
 
-       
+        # --- Load entries ---
         self.load_entries()
 
     def load_entries(self):
-       
         self.table.setRowCount(0)
         for fname in self.storage.list_files():
             entry = self.storage.load(self.key, fname)
-            row = self.table.rowCount()
-            self.table.insertRow(row)
-            self.table.setItem(row, 0, QTableWidgetItem(entry["name"]))
-            self.table.setItem(row, 1, QTableWidgetItem(entry["user"]))
-          
-            self.table.setItem(row, 2, QTableWidgetItem("••••••••"))
-            self.table.setItem(row, 3, QTableWidgetItem(entry["cat"]))
-            self.table.setItem(row, 4, QTableWidgetItem(entry["note"]))
+            r = self.table.rowCount()
+            self.table.insertRow(r)
+            self.table.setItem(r, 0, QTableWidgetItem(entry["name"]))
+            self.table.setItem(r, 1, QTableWidgetItem(entry["user"]))
+            # masked by default
+            self.table.setItem(r, 2, QTableWidgetItem("••••••••"))
+            self.table.setItem(r, 3, QTableWidgetItem(entry["cat"]))
+            self.table.setItem(r, 4, QTableWidgetItem(entry["note"]))
         self.table.resizeColumnsToContents()
         self.status.showMessage(f"{self.table.rowCount()} entries loaded", 3000)
 
@@ -138,7 +140,6 @@ class MainWindow(QMainWindow):
         self.status.showMessage("Entry deleted", 2000)
 
     def copy_password(self):
-        
         row = self.table.currentRow()
         if row < 0:
             QMessageBox.warning(self, "Copy Password", "Select a row first.")
@@ -147,7 +148,6 @@ class MainWindow(QMainWindow):
         fname = self.storage.list_files()[row]
         pwd = self.storage.load(self.key, fname)["pwd"]
 
-       
         if QMessageBox.warning(
             self, "Warning",
             "The password will be placed in the clipboard\n"
@@ -157,32 +157,23 @@ class MainWindow(QMainWindow):
             del pwd; gc.collect()
             return
 
-        
         clipboard: QClipboard = QApplication.clipboard()
         clipboard.setText(pwd)
         del pwd; gc.collect()
-        
         QTimer.singleShot(10_000, lambda: QApplication.clipboard().clear())
-
         self.status.showMessage("Password copied to clipboard (will clear in 10s)", 3000)
 
     def show_passwords(self):
-        
-        
         for r in range(self.table.rowCount()):
             fname = self.storage.list_files()[r]
             pwd = self.storage.load(self.key, fname)["pwd"]
-            
             self.table.item(r, 2).setText(pwd)
-            del pwd  
+            del pwd
         gc.collect()
-
-        
         QTimer.singleShot(5_000, self.mask_passwords)
         self.status.showMessage("Passwords visible for 5 seconds", 3000)
 
     def mask_passwords(self):
-        """Visszamaskírozza a jelszómezőket."""
         for r in range(self.table.rowCount()):
             self.table.item(r, 2).setText("••••••••")
 
@@ -251,6 +242,18 @@ class MainWindow(QMainWindow):
         self.key = new_key
         QMessageBox.information(self, "Success", "Master password changed successfully.")
 
+    def manage_recovery(self):
+        reply = QMessageBox.question(
+            self, "Regenerate Recovery Keys",
+            "This will invalidate all existing recovery keys\nand generate new ones.\nContinue?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if reply != QMessageBox.Yes:
+            return
+        dlg = RecoveryKeysDialog(self.config_dir, parent=self)
+        dlg.exec()
+        self.status.showMessage("Recovery keys regenerated", 3000)
+
     def logout(self):
         from .login_window import LoginWindow
         self.close()
@@ -260,5 +263,5 @@ class MainWindow(QMainWindow):
     def about_dialog(self):
         QMessageBox.information(
             self, "About SecureVault",
-            "SecureVault v1.0\nA modern, password manager. By: Rexolt"
+            "SecureVault v1.0\nA modern, dark-themed password manager"
         )
