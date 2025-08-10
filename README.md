@@ -34,7 +34,7 @@ SecureVault is a modern, dark-themed password manager written in Python and PySi
 
 1. Clone or download this repository:
     ```bash
-    git clone https://github.com/yourusername/securevault.git
+    git clone https://github.com/Rexolt/securevault.git
     cd securevault
     ```
 2. Install dependencies:
